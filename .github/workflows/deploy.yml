@@ -7,21 +7,25 @@ on:
 
 jobs:
   deploy:
-    # Tell GitHub to run this job on your local server agent
     runs-on: self-hosted
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      # The agent is already on the server, so we just build and run locally
-      - name: Install & Run Database Migrations
+      - name: Sync Code to Production Directory
         run: |
+          # Copy everything from the runner workspace to the active app folder
+          cp -r ./* /var/www/menu-app/
+
+      - name: Install Dependencies & Update Database
+        run: |
+          cd /var/www/menu-app
           npm install --production
           PGPASSWORD='db_password' psql -h localhost -U db_user -d menu_db -f schema.sql
 
-       Pemb: Restart Application Process
       - name: Restart App with PM2
         run: |
+          cd /var/www/menu-app
           pm2 restart ecosystem.config.js --env production || pm2 start ecosystem.config.js --env production
           pm2 save
