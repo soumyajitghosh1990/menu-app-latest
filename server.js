@@ -87,7 +87,32 @@ app.delete('/api/menu/:id', async (req, res) => {
 });
 
 
-// HTML Frontend (Single Page UI with Admin Controls)
+// --- SECURITY MIDDLEWARE FOR ADMIN ACCESS ---
+const basicAuth = (req, res, next) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader) {
+    res.setHeader('WWW-Authenticate', 'Basic realm="Admin Dashboard"');
+    return res.status(401).send('Authentication required.');
+  }
+
+  // Parse the Base64 encoded credentials string (username:password)
+  const auth = Buffer.from(authHeader.split(' ')[1], 'base64').toString().split(':');
+  const username = auth[0];
+  const password = auth[1];
+
+  // Secure Credentials Configuration (Change these to your preferred values!)
+  const ADMIN_USERNAME = 'admin';
+  const ADMIN_PASSWORD = 'SuperSecurePassword123'; 
+
+  if (username === ADMIN_USERNAME && password === ADMIN_PASSWORD) {
+    next(); // Credentials match, proceed to the admin page
+  } else {
+    res.setHeader('WWW-Authenticate', 'Basic realm="Admin Dashboard"');
+    return res.status(401).send('Invalid credentials.');
+  }
+};
+
+// 1. PUBLIC ROUTE: Read-Only Menu View
 app.get('/', (req, res) => {
   res.send(`
     <!DOCTYPE html>
@@ -95,42 +120,89 @@ app.get('/', (req, res) => {
     <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>Menu Management Dashboard</title>
+        <title>Our Menu</title>
+        <style>
+            body { font-family: 'Segoe UI', system-ui, sans-serif; max-width: 600px; margin: 40px auto; padding: 0 20px; background: #f4f6f8; color: #333; }
+            h1 { text-align: center; color: #2c3e50; margin-bottom: 30px; }
+            .card { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+            table { width: 100%; border-collapse: collapse; }
+            th, td { padding: 16px 12px; text-align: left; border-bottom: 1px solid #e0e0e0; }
+            th { background-color: #f8f9fa; font-weight: 600; color: #666; }
+            .rate { text-align: right; font-weight: 600; color: #2e7d32; }
+        </style>
+    </head>
+    <body>
+        <h1>Our Menu</h1>
+        <div class="card">
+            <table>
+                <thead>
+                    <tr>
+                        <th>Menu Item</th>
+                        <th style="text-align: right;">Rate</th>
+                    </tr>
+                </thead>
+                <tbody id="menu-body">
+                    <tr><td colspan="2" style="text-align:center;">Loading delicious options...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
+        <script>
+            fetch('/api/menu')
+                .then(res => res.json())
+                .then(data => {
+                    const tbody = document.getElementById('menu-body');
+                    if (data.length === 0) {
+                        tbody.innerHTML = '<tr><td colspan="2" style="text-align:center; color:#999;">No items on the menu today.</td></tr>';
+                        return;
+                    }
+                    tbody.innerHTML = data.map(row => \`
+                        <tr>
+                            <td>\${row.item_name}</td>
+                            <td class="rate">₹\${parseFloat(row.rate).toFixed(2)}</td>
+                        </tr>
+                    \`).join('');
+                });
+        </script>
+    </body>
+    </html>
+  `);
+});
+
+// 2. PRIVATE ROUTE: Secured Dashboard (Protected by basicAuth middleware)
+app.get('/admin', basicAuth, (req, res) => {
+  res.send(`
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Admin Menu Management</title>
         <style>
             body { font-family: 'Segoe UI', system-ui, sans-serif; max-width: 900px; margin: 40px auto; padding: 0 20px; background: #f4f6f8; color: #333; }
             h1 { text-align: center; color: #2c3e50; margin-bottom: 30px; }
             h2 { color: #34495e; border-bottom: 2px solid #ddd; padding-bottom: 8px; margin-top: 0; }
-            
-            /* Dashboard Grid Layout */
             .dashboard { display: grid; grid-template-columns: 1fr 1.5fr; gap: 30px; }
             @media (max-width: 768px) { .dashboard { grid-template-columns: 1fr; } }
-            
             .card { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-            
-            /* Form Styling */
             .form-group { margin-bottom: 15px; }
             label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 0.9rem; }
             input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; font-size: 1rem; }
-            
-            /* Buttons */
-            button { width: 100%; padding: 12px; border: none; border-radius: 4px; font-weight: bold; font-size: 1rem; cursor: pointer; transition: background 0.2s; }
+            button { width: 100%; padding: 12px; border: none; border-radius: 4px; font-weight: bold; font-size: 1rem; cursor: pointer; }
             .btn-primary { background-color: #27ae60; color: white; }
             .btn-primary:hover { background-color: #219653; }
             .btn-delete { background-color: #e74c3c; color: white; padding: 6px 12px; width: auto; font-size: 0.85rem; border-radius: 3px; }
             .btn-delete:hover { background-color: #c0392b; }
-            
-            /* Table Styling */
             table { width: 100%; border-collapse: collapse; }
             th, td { padding: 12px; text-align: left; border-bottom: 1px solid #e0e0e0; }
             th { background-color: #f8f9fa; font-weight: 600; color: #666; }
             .rate { text-align: right; font-weight: 600; }
             .action-col { text-align: center; width: 80px; }
-            
             .error-msg { color: #e74c3c; font-size: 0.85rem; margin-top: 5px; display: none; }
         </style>
     </head>
     <body>
-        <h1>Menu Management Dashboard</h1>
+        <h1>Admin Control Panel</h1>
         
         <div class="dashboard">
             <div class="card">
@@ -138,19 +210,19 @@ app.get('/', (req, res) => {
                 <form id="menu-form">
                     <div class="form-group">
                         <label for="itemName">Item Name</label>
-                        <input type="text" id="itemName" placeholder="e.g., Kesar Pista Chai" required>
+                        <input type="text" id="itemName" required>
                         <div id="duplicate-error" class="error-msg">This item already exists.</div>
                     </div>
                     <div class="form-group">
                         <label for="itemRate">Rate (₹)</label>
-                        <input type="number" id="itemRate" step="0.01" min="0" placeholder="0.00" required>
+                        <input type="number" id="itemRate" step="0.01" min="0" required>
                     </div>
                     <button type="submit" class="btn-primary">Add to Menu</button>
                 </form>
             </div>
             
             <div class="card">
-                <h2>Live Menu (2-Column)</h2>
+                <h2>Live Menu Items</h2>
                 <table>
                     <thead>
                         <tr>
@@ -160,7 +232,7 @@ app.get('/', (req, res) => {
                         </tr>
                     </thead>
                     <tbody id="menu-body">
-                        <tr><td colspan="3" style="text-align:center;">Loading menu items...</td></tr>
+                        <tr><td colspan="3" style="text-align:center;">Loading...</td></tr>
                     </tbody>
                 </table>
             </div>
@@ -171,17 +243,12 @@ app.get('/', (req, res) => {
             const menuForm = document.getElementById('menu-form');
             const duplicateError = document.getElementById('duplicate-error');
 
-            // 1. Fetch and render menu items dynamically
             function loadMenu() {
                 fetch('/api/menu')
                     .then(res => res.json())
                     .then(data => {
-                        if (data.error) {
-                            menuBody.innerHTML = '<tr><td colspan="3" style="color:red; text-align:center;">Error loading database lines.</td></tr>';
-                            return;
-                        }
                         if (data.length === 0) {
-                            menuBody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#999;">Menu is empty. Add items using the control panel.</td></tr>';
+                            menuBody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#999;">Menu is empty.</td></tr>';
                             return;
                         }
                         menuBody.innerHTML = data.map(row => \`
@@ -196,11 +263,9 @@ app.get('/', (req, res) => {
                     });
             }
 
-            // 2. Handle Form Submission (Create Item via POST)
             menuForm.addEventListener('submit', function(e) {
                 e.preventDefault();
                 duplicateError.style.display = 'none';
-
                 const item_name = document.getElementById('itemName').value.trim();
                 const rate = parseFloat(document.getElementById('itemRate').value);
 
@@ -210,36 +275,17 @@ app.get('/', (req, res) => {
                     body: JSON.stringify({ item_name, rate })
                 })
                 .then(res => {
-                    if (res.status === 409) {
-                        duplicateError.style.display = 'block';
-                        throw new Error('Duplicate key entry');
-                    }
-                    if (!res.ok) throw new Error('Server error');
+                    if (res.status === 409) { duplicateError.style.display = 'block'; throw new Error('Duplicate'); }
                     return res.json();
                 })
-                .then(() => {
-                    menuForm.reset();
-                    loadMenu(); // Refresh table view instantly
-                })
-                .catch(err => console.error('Creation failed:', err));
+                .then(() => { menuForm.reset(); loadMenu(); });
             });
 
-            // 3. Handle Deletion via DELETE endpoint
             function deleteItem(id) {
-                if (!confirm('Are you sure you want to remove this item?')) return;
-
-                fetch(\`/api/menu/\${id}\`, { method: 'DELETE' })
-                    .then(res => {
-                        if (!res.ok) throw new Error('Deletion failed');
-                        return res.json();
-                    })
-                    .then(() => {
-                        loadMenu(); // Refresh table view instantly
-                    })
-                    .catch(err => console.error(err));
+                if (!confirm('Delete this item?')) return;
+                fetch(\`/api/menu/\${id}\`, { method: 'DELETE' }).then(() => loadMenu());
             }
 
-            // Run initial load on boot
             loadMenu();
         </script>
     </body>
