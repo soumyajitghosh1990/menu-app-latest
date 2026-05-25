@@ -74,6 +74,7 @@ app.get('/', (req, res) => {
   `);
 });
 
+// FIXED VERSION
 app.listen(port, () => {
-  console.log(\`App running on port \${port}\`);
+  console.log(`App running on port ${port}`);
 });
