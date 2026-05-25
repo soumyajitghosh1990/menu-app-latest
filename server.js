@@ -132,7 +132,7 @@ app.get('/', (req, res) => {
         </style>
     </head>
     <body>
-        <h1>Our Menu</h1>
+        <h1>Agapastala's Today's Menu</h1>
         <div class="card">
             <table>
                 <thead>
